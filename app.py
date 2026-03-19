@@ -1,14 +1,20 @@
 from flask import Flask, render_template_string
 import json
+import random
 
 app = Flask(__name__)
 
+# Four segments – the order can be anything, but we'll assign weights in JavaScript
 WHEEL_ITEMS = [
     "10 tk salami",
     "20 tk salami",
     "30 tk salami",
     "NO salami but blessings from sayem"
 ]
+
+# We'll pass these weights to JavaScript (10x for blessings)
+# Index 3 corresponds to "NO salami"
+WEIGHTS = [1, 1, 1, 10]
 
 HTML = """
 <!DOCTYPE html>
@@ -19,7 +25,7 @@ HTML = """
     <title>EID MUBARAK from SAYEM</title>
 
     <meta property="og:title" content="EID MUBARAK from SAYEM" />
-    <meta property="og:description" content="Spin the Eid salami wheel and try your luck!" />
+    <meta property="og:description" content="Spin the Eid salami wheel – blessings are 10x more likely!" />
     <meta property="og:type" content="website" />
 
     <style>
@@ -339,13 +345,13 @@ HTML = """
 
         <h1>EID MUBARAK from SAYEM</h1>
         <div class="subtitle">
-            ✨ Spin & receive barakah – one try per person ✨
+            ✨ Blessings are 10x more likely – try your luck! ✨
         </div>
 
         <div class="intro-box">
             <p style="font-size: 1.2rem;">
                 🌙 Wishing you and your family a blessed Eid filled with peace, happiness,
-                and endless barakah. Give the wheel a spin and see what Eid has written for you.
+                and endless barakah. Give the wheel a spin – but remember, blessings are far more common!
             </p>
             <div class="badge">🎁 One spin only (saved in your browser)</div>
         </div>
@@ -366,24 +372,27 @@ HTML = """
             </div>
 
             <div class="prize-list">
-                <h3>🎁 Prizes</h3>
+                <h3>🎁 Prizes (10x more blessings!)</h3>
                 <ul>
-                    <li>10 tk salami</li>
-                    <li>20 tk salami</li>
-                    <li>30 tk salami</li>
-                    <li>NO salami but blessings from sayem</li>
+                    <li>10 tk salami (rare)</li>
+                    <li>20 tk salami (rare)</li>
+                    <li>30 tk salami (rare)</li>
+                    <li>NO salami but blessings from sayem (very common)</li>
                 </ul>
             </div>
 
             <div class="footer-note">
-                * One spin per browser – results are saved locally.
+                * One spin per browser – results saved locally.
             </div>
         </div>
     </div>
 
     <script>
         (function() {
-            const items = {{ items|safe }};
+            // Items and weights passed from Flask
+            const items = {{ items|safe }};          // e.g. ["10 tk salami", "20 tk salami", "30 tk salami", "NO salami but blessings from sayem"]
+            const weights = {{ weights|safe }};       // e.g. [1, 1, 1, 10]
+
             const spinBtn = document.getElementById("spinBtn");
             const resultBox = document.getElementById("resultBox");
             const canvas = document.getElementById("wheelCanvas");
@@ -398,8 +407,8 @@ HTML = """
             let currentRotation = 0;
             let spinning = false;
 
-            // Aesthetic Eid color palette
-            const colors = ["#FFB347", "#66BB77", "#FF8A80", "#BA7FD0"];  // orange, green, coral, lavender
+            // Aesthetic Eid color palette (4 colors)
+            const colors = ["#FFB347", "#66BB77", "#FF8A80", "#BA7FD0"];
 
             // Helper: draw wrapped text centered at (x, y)
             function drawWrappedText(context, text, x, y, maxWidth, lineHeight) {
@@ -419,7 +428,6 @@ HTML = """
                 }
                 lines.push(currentLine);
 
-                // Calculate vertical start position to center the block
                 const totalHeight = lines.length * lineHeight;
                 let startY = y - totalHeight / 2 + lineHeight / 2;
 
@@ -449,12 +457,11 @@ HTML = """
                     const midAngle = startAngle + arcSize / 2;
                     ctx.rotate(midAngle);
                     ctx.fillStyle = "#ffffff";
-                    ctx.font = "bold 18px 'Segoe UI', Arial, sans-serif";
+                    ctx.font = "bold 20px 'Segoe UI', Arial, sans-serif";
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
-                    // Position text at 70% of the radius
                     const textRadius = radius * 0.7;
-                    drawWrappedText(ctx, items[i], textRadius, 0, 140, 24);
+                    drawWrappedText(ctx, items[i], textRadius, 0, 150, 26);
                     ctx.restore();
                 }
 
@@ -478,6 +485,17 @@ HTML = """
                     ctx.fill();
                     ctx.shadowColor = 'transparent';
                 }
+            }
+
+            // Weighted random selection
+            function getWeightedRandomIndex() {
+                const totalWeight = weights.reduce((a, b) => a + b, 0);
+                let random = Math.random() * totalWeight;
+                for (let i = 0; i < weights.length; i++) {
+                    if (random < weights[i]) return i;
+                    random -= weights[i];
+                }
+                return weights.length - 1; // fallback
             }
 
             // Check if already spun
@@ -527,16 +545,13 @@ HTML = """
                 spinBtn.disabled = true;
                 resultBox.innerHTML = "The wheel is spinning... ✨ بسم الله";
 
-                // Pick random winning index
-                const winningIndex = Math.floor(Math.random() * total);
+                // Pick winning index using weighted probabilities
+                const winningIndex = getWeightedRandomIndex();
                 const selectedItem = items[winningIndex];
 
-                // 60 RPM = 1 revolution per second. Spin for 5 seconds => 5 full spins.
-                const fullSpins = 5;   // 5 rotations
-                // Target rotation so that pointer (at -PI/2) aligns with center of winning segment
-                // center of segment = -PI/2 + i*arcSize + arcSize/2
-                // required rotation R = - (i*arcSize + arcSize/2)  (mod 2PI)
-                // we add fullSpins * 2PI to get many spins
+                // 5 full spins (60 RPM = 1 RPS) for 5 seconds duration
+                const fullSpins = 5;
+                // Target rotation so pointer aligns with center of winning segment
                 const targetAngle = (2 * Math.PI * fullSpins) - (winningIndex * arcSize + arcSize / 2);
 
                 const startRotation = currentRotation % (2 * Math.PI);
@@ -546,7 +561,6 @@ HTML = """
                 function animate(now) {
                     const elapsed = now - startTime;
                     const progress = Math.min(elapsed / duration, 1);
-                    // Smooth ease-out for a natural stop
                     const easeOut = 1 - Math.pow(1 - progress, 3);
 
                     currentRotation = startRotation + (targetAngle * easeOut);
@@ -559,7 +573,7 @@ HTML = """
                         setStoredResult(selectedItem);
                         showResult(selectedItem);
                         spinBtn.textContent = "Spin Used";
-                        spinBtn.disabled = true;  // already disabled, but for safety
+                        spinBtn.disabled = true;
                     }
                 }
 
@@ -584,7 +598,11 @@ HTML = """
 
 @app.route("/")
 def home():
-    return render_template_string(HTML, items=json.dumps(WHEEL_ITEMS))
+    return render_template_string(
+        HTML,
+        items=json.dumps(WHEEL_ITEMS),
+        weights=json.dumps(WEIGHTS)
+    )
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
